@@ -1,77 +1,114 @@
 /**
- * This file is part of Todo.txt Touch, an Android app for managing your todo.txt file (http://todotxt.com).
+ * This file is part of Todo.txt for Android, an app for managing your todo.txt file (http://todotxt.com).
  *
- * Copyright (c) 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * Copyright (c) 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  *
  * LICENSE:
  *
- * Todo.txt Touch is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
+ * Todo.txt for Android is free software: you can redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
  * later version.
  *
- * Todo.txt Touch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
- * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * Todo.txt for Android is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the 
+ * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
  * details.
  *
- * You should have received a copy of the GNU General Public License along with Todo.txt Touch.  If not, see
+ * You should have received a copy of the GNU General Public License along with Todo.txt for Android. If not, see
  * <http://www.gnu.org/licenses/>.
  *
- * @author Todo.txt contributors <todotxt@yahoogroups.com>
+ * Todo.txt for Android's source code is available at https://github.com/ginatrapani/todo.txt-android
+ *
+ * @author Todo.txt for Android contributors <todotxt@yahoogroups.com>
  * @license http://www.gnu.org/licenses/gpl.html
- * @copyright 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * @copyright 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  */
 package com.todotxt.todotxttouch;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.DialogInterface;
+import android.content.DialogInterface.OnCancelListener;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.preference.CheckBoxPreference;
+import android.preference.ListPreference;
 import android.preference.Preference;
+import android.preference.Preference.OnPreferenceChangeListener;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceScreen;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.style.ForegroundColorSpan;
 
 public class Preferences extends PreferenceActivity {
 	final static String TAG = Preferences.class.getSimpleName();
 
 	private Preference aboutDialog;
 	private Preference logoutDialog;
-	private Preference archiveDialog;
+	private TodoLocationPreference mLocationPreference;
+	private ListPreference periodicSync;
 	private static final int ABOUT_DIALOG = 1;
 	private static final int LOGOUT_DIALOG = 2;
-	private static final int ARCHIVE_DIALOG = 3;
-	public static final int RESULT_SYNC_LIST = 2;
+	TodoApplication m_app;
 
 	private String version;
 
+	@SuppressWarnings("deprecation")
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		addPreferencesFromResource(R.xml.preferences);
 
+		m_app = (TodoApplication) getApplication();
+		((CheckBoxPreference) findPreference(m_app.m_prefs
+				.getPrependDatePrefKey())).setChecked(m_app.m_prefs
+				.isPrependDateEnabled());
+
+		mLocationPreference = (TodoLocationPreference) findPreference(m_app.m_prefs
+				.getTodoPathKey());
+		mLocationPreference.setApplication(m_app);
+		mLocationPreference.setDisplayWarning(m_app.m_prefs.needToPush());
+
 		PackageInfo packageInfo;
+
 		try {
 			packageInfo = getPackageManager().getPackageInfo(getPackageName(),
 					0);
 			Preference versionPref = (Preference) findPreference("app_version");
 			versionPref.setSummary("v" + packageInfo.versionName);
 			version = packageInfo.versionName;
-
 		} catch (NameNotFoundException e) {
 			// e.printStackTrace();
 		}
+
 		aboutDialog = findPreference("app_version");
 		logoutDialog = findPreference("logout_dropbox");
-		archiveDialog = findPreference("archive_now");
+		periodicSync = (ListPreference) findPreference(m_app.m_prefs
+				.getPeriodicSyncPrefKey());
+		setPeriodicSummary(periodicSync.getValue());
+		periodicSync
+				.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
+					@Override
+					public boolean onPreferenceChange(Preference preference,
+							Object newValue) {
+						setPeriodicSummary(newValue);
+						return true;
+					}
+				});
 	}
 
-	protected void onResume() {
-		super.onResume();
+	private void setPeriodicSummary(Object newValue) {
+		// Sync preference summary with selected entry. Ugly but this is the
+		// only way that works.
+		periodicSync.setSummary(periodicSync.getEntries()[periodicSync
+				.findIndexOfValue((String) newValue)]);
 	}
 
+	@SuppressWarnings("deprecation")
 	@Override
 	public boolean onPreferenceTreeClick(PreferenceScreen screen,
 			Preference preference) {
@@ -79,20 +116,20 @@ public class Preferences extends PreferenceActivity {
 			showDialog(ABOUT_DIALOG);
 		} else if (preference == logoutDialog) {
 			showDialog(LOGOUT_DIALOG);
-		} else if (preference == archiveDialog) {
-			showDialog(ARCHIVE_DIALOG);
 		}
+
 		return true;
 	}
 
 	@Override
-	protected Dialog onCreateDialog(int id) {
+	protected Dialog onCreateDialog(final int id) {
 		if (id == ABOUT_DIALOG) {
 			AlertDialog.Builder aboutAlert = new AlertDialog.Builder(this);
-			aboutAlert.setTitle("Todo.txt Touch v" + version);
+			aboutAlert.setTitle("Todo.txt v" + version);
 			aboutAlert
 					.setMessage("by Gina Trapani &\nthe Todo.txt community\n\nhttp://todotxt.com");
 			aboutAlert.setIcon(R.drawable.todotxt_touch_icon);
+
 			aboutAlert.setPositiveButton("Follow us",
 					new DialogInterface.OnClickListener() {
 						public void onClick(DialogInterface arg0, int arg1) {
@@ -102,16 +139,37 @@ public class Preferences extends PreferenceActivity {
 							startActivity(i);
 						}
 					});
+
 			aboutAlert.setNegativeButton("Close",
 					new DialogInterface.OnClickListener() {
 						public void onClick(DialogInterface arg0, int arg1) {
 						}
 					});
-			return aboutAlert.show();
+
+			aboutAlert.setOnCancelListener(new OnCancelListener() {
+				@SuppressWarnings("deprecation")
+				@Override
+				public void onCancel(DialogInterface dialog) {
+					removeDialog(id);
+				}
+			});
+
+			return aboutAlert.create();
 		} else if (id == LOGOUT_DIALOG) {
 			AlertDialog.Builder logoutAlert = new AlertDialog.Builder(this);
 			logoutAlert.setTitle(R.string.areyousure);
-			logoutAlert.setMessage(R.string.dropbox_logout_explainer);
+			SpannableStringBuilder ss = new SpannableStringBuilder();
+
+			if (m_app.m_prefs.needToPush()) {
+				ss.append(getString(R.string.dropbox_logout_warning));
+				ss.setSpan(new ForegroundColorSpan(Color.RED), 0, ss.length(),
+						Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+				ss.append("\n\n");
+			}
+
+			ss.append(getString(R.string.dropbox_logout_explainer));
+			logoutAlert.setMessage(ss);
+
 			logoutAlert.setPositiveButton(R.string.dropbox_logout_pref_title,
 					new DialogInterface.OnClickListener() {
 						@Override
@@ -119,39 +177,29 @@ public class Preferences extends PreferenceActivity {
 							((TodoApplication) getApplication())
 									.getRemoteClientManager().getRemoteClient()
 									.deauthenticate();
-							Preferences.this.setResult(RESULT_SYNC_LIST);
 
 							// produce a logout intent and broadcast it
 							Intent broadcastLogoutIntent = new Intent();
 							broadcastLogoutIntent
-									.setAction("com.todotxt.todotxttouch.ACTION_LOGOUT");
+									.setAction(Constants.INTENT_ACTION_LOGOUT);
 							sendBroadcast(broadcastLogoutIntent);
 							finish();
 						}
 					});
-			logoutAlert.setNegativeButton(R.string.cancel, null);
-			return logoutAlert.show();
-		} else if (id == ARCHIVE_DIALOG) {
-			AlertDialog.Builder archiveAlert = new AlertDialog.Builder(this);
-			archiveAlert.setTitle(R.string.archive_now_title);
-			archiveAlert.setMessage(R.string.archive_now_explainer);
-			archiveAlert.setPositiveButton(R.string.archive_now_pref_title,
-					new DialogInterface.OnClickListener() {
-						@Override
-						public void onClick(DialogInterface dialog, int which) {
-							Preferences.this.setResult(RESULT_OK);
 
-							// produce a archive intent and broadcast it
-							Intent broadcastArchiveIntent = new Intent();
-							broadcastArchiveIntent
-									.setAction("com.todotxt.todotxttouch.ACTION_ARCHIVE");
-							sendBroadcast(broadcastArchiveIntent);
-							finish();
-						}
-					});
-			archiveAlert.setNegativeButton(R.string.cancel, null);
-			return archiveAlert.show();
+			logoutAlert.setNegativeButton(R.string.cancel, null);
+
+			logoutAlert.setOnCancelListener(new OnCancelListener() {
+				@SuppressWarnings("deprecation")
+				@Override
+				public void onCancel(DialogInterface dialog) {
+					removeDialog(id);
+				}
+			});
+
+			return logoutAlert.create();
 		}
+
 		return null;
 	}
 }

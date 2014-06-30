@@ -1,310 +1,346 @@
 /**
- * This file is part of Todo.txt Touch, an Android app for managing your todo.txt file (http://todotxt.com).
+ * This file is part of Todo.txt for Android, an app for managing your todo.txt file (http://todotxt.com).
  *
- * Copyright (c) 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * Copyright (c) 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  *
  * LICENSE:
  *
- * Todo.txt Touch is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
+ * Todo.txt for Android is free software: you can redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
  * later version.
  *
- * Todo.txt Touch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
- * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * Todo.txt for Android is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the 
+ * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
  * details.
  *
- * You should have received a copy of the GNU General Public License along with Todo.txt Touch.  If not, see
+ * You should have received a copy of the GNU General Public License along with Todo.txt for Android. If not, see
  * <http://www.gnu.org/licenses/>.
  *
- * @author Todo.txt contributors <todotxt@yahoogroups.com>
+ * Todo.txt for Android's source code is available at https://github.com/ginatrapani/todo.txt-android
+ *
+ * @author Todo.txt for Android contributors <todotxt@yahoogroups.com>
  * @license http://www.gnu.org/licenses/gpl.html
- * @copyright 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * @copyright 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  */
+
 package com.todotxt.todotxttouch.remote;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.List;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.SharedPreferences.Editor;
-import android.os.Environment;
 import android.util.Log;
 
 import com.dropbox.client2.DropboxAPI;
+import com.dropbox.client2.DropboxAPI.Entry;
 import com.dropbox.client2.android.AndroidAuthSession;
+import com.dropbox.client2.exception.DropboxException;
+import com.dropbox.client2.exception.DropboxServerException;
 import com.dropbox.client2.session.AccessTokenPair;
 import com.dropbox.client2.session.AppKeyPair;
 import com.dropbox.client2.session.Session.AccessType;
 import com.todotxt.todotxttouch.Constants;
 import com.todotxt.todotxttouch.R;
 import com.todotxt.todotxttouch.TodoApplication;
-import com.todotxt.todotxttouch.TodoTxtTouch;
+import com.todotxt.todotxttouch.TodoPreferences;
 import com.todotxt.todotxttouch.util.Util;
 
 class DropboxRemoteClient implements RemoteClient {
-	final static String TAG = TodoTxtTouch.class.getSimpleName();
-	
-	private static final String TODO_TXT_REMOTE_FILE_NAME = "todo.txt";
-	private static final String DONE_TXT_REMOTE_FILE_NAME = "done.txt";
-	private static final AccessType ACCESS_TYPE = AccessType.DROPBOX;
-	private static final File TODO_TXT_TMP_FILE = new File(
-			Environment.getExternalStorageDirectory(),
-			"data/com.todotxt.todotxttouch/tmp/todo.txt");
-	private static final File DONE_TXT_TMP_FILE = new File(
-			Environment.getExternalStorageDirectory(),
-			"data/com.todotxt.todotxttouch/tmp/done.txt");
+    final static String TAG = DropboxRemoteClient.class.getSimpleName();
 
-	private DropboxAPI<AndroidAuthSession> dropboxApi;
-	private TodoApplication todoApplication;
-	private SharedPreferences sharedPreferences;
+    private static final String TODO_TXT_REMOTE_FILE_NAME = "todo.txt";
+    private static final String DONE_TXT_REMOTE_FILE_NAME = "done.txt";
+    private static final AccessType ACCESS_TYPE = AccessType.DROPBOX;
+    private static final File TODO_TXT_TMP_FILE = new File(
+            TodoApplication.getAppContetxt().getFilesDir(),
+            "tmp/todo.txt");
+    private static final File DONE_TXT_TMP_FILE = new File(
+            TodoApplication.getAppContetxt().getFilesDir(),
+            "tmp/done.txt");
 
-	public DropboxRemoteClient(TodoApplication todoApplication,
-			SharedPreferences sharedPreferences) {
-		this.todoApplication = todoApplication;
-		this.sharedPreferences = sharedPreferences;
-	}
+    private DropboxAPI<AndroidAuthSession> dropboxApi;
+    private TodoApplication todoApplication;
+    private TodoPreferences sharedPreferences;
 
-	@Override
-	public Client getClient() {
-		return Client.DROPBOX;
-	}
+    public DropboxRemoteClient(TodoApplication todoApplication,
+            TodoPreferences sharedPreferences) {
+        this.todoApplication = todoApplication;
+        this.sharedPreferences = sharedPreferences;
+    }
 
-	/**
-	 * Get the stored key - secret pair for authenticating the user
-	 * 
-	 * @return a string array with key and secret
-	 */
-	private AccessTokenPair getStoredKeys() {
-		String key = null;
-		String secret = null;
+    @Override
+    public Client getClient() {
+        return Client.DROPBOX;
+    }
 
-		key = sharedPreferences.getString(Constants.PREF_ACCESSTOKEN_KEY, null);
-		secret = sharedPreferences.getString(Constants.PREF_ACCESSTOKEN_SECRET,
-				null);
-		if (key != null && secret != null) {
-			return new AccessTokenPair(key, secret);
-		}
-		return null;
-	}
+    /**
+     * Get the stored key - secret pair for authenticating the user
+     * 
+     * @return a string array with key and secret
+     */
+    private AccessTokenPair getStoredKeys() {
+        String key = null;
+        String secret = null;
 
-	/**
-	 * Store the key - secret pair for an authenticated user.
-	 * 
-	 * @param accessTokenKey
-	 * @param accessTokenSecret
-	 */
-	void storeKeys(String accessTokenKey, String accessTokenSecret) {
-		Editor editor = sharedPreferences.edit();
-		editor.putString(Constants.PREF_ACCESSTOKEN_KEY, accessTokenKey);
-		editor.putString(Constants.PREF_ACCESSTOKEN_SECRET, accessTokenSecret);
-		editor.commit();
-	}
+        key = sharedPreferences.getAccessToken();
+        secret = sharedPreferences.getAccessTokenSecret();
 
-	/**
-	 * Clear the stored keys, either because they are bad, or user has requested
-	 * it
-	 */
-	private void clearAuthToken() {
-		Editor editor = sharedPreferences.edit();
-		editor.clear();
-		editor.commit();
-	}
+        if (key != null && secret != null) {
+            return new AccessTokenPair(key, secret);
+        }
 
-	@Override
-	public boolean authenticate() {
-		String consumerKey = todoApplication.getResources()
-				.getText(R.string.dropbox_consumer_key).toString();
-		String consumerSecret = todoApplication.getText(
-				R.string.dropbox_consumer_secret).toString();
+        return null;
+    }
 
-		AppKeyPair appKeys = new AppKeyPair(consumerKey, consumerSecret);
-		AndroidAuthSession session = new AndroidAuthSession(appKeys,
-				ACCESS_TYPE);
-		dropboxApi = new DropboxAPI<AndroidAuthSession>(session);
+    /**
+     * Store the key - secret pair for an authenticated user.
+     * 
+     * @param accessTokenKey
+     * @param accessTokenSecret
+     */
+    void storeKeys(String accessTokenKey, String accessTokenSecret) {
+        sharedPreferences.storeAccessToken(accessTokenKey, accessTokenSecret);
+    }
 
-		AccessTokenPair access = getStoredKeys();
-		if (access != null) {
-			dropboxApi.getSession().setAccessTokenPair(access);
-		}
-		return true;
-	}
+    /**
+     * Clear the stored keys, either because they are bad, or user has requested
+     * it
+     */
+    private void clearAuthToken() {
+        sharedPreferences.clear();
+    }
 
-	@Override
-	public void deauthenticate() {
-		clearAuthToken();
-		dropboxApi.getSession().unlink();
-		TODO_TXT_TMP_FILE.delete();
-	}
+    @Override
+    public boolean authenticate() {
+        String consumerKey = todoApplication.getResources().getText(R.string.dropbox_consumer_key)
+                .toString();
+        String consumerSecret = todoApplication.getText(R.string.dropbox_consumer_secret)
+                .toString();
+        consumerKey = consumerKey.replaceFirst("^db-", "");
 
-	@Override
-	public boolean isAuthenticated() {
-		return dropboxApi.getSession().isLinked();
-	}
+        AppKeyPair appKeys = new AppKeyPair(consumerKey, consumerSecret);
+        AndroidAuthSession session = new AndroidAuthSession(appKeys, ACCESS_TYPE);
+        dropboxApi = new DropboxAPI<AndroidAuthSession>(session);
 
-	@Override
-	public boolean isLoggedIn() {
-		return dropboxApi.getSession().isLinked();
-	}
+        AccessTokenPair access = getStoredKeys();
 
-	/**
-	 * Store the current 'rev' from the metadata retrieved from Dropbox.
-	 * 
-	 * @param key
-	 *            Name of the key in sharedPreferences under which to store the
-	 *            rev value.
-	 * @param rev
-	 *            The value of the rev to be stored.
-	 */
-	private void storeRev(String key, String rev) {
-		Log.d(TAG, "Storing rev. key=" + key + ". val=" + rev);
-		Editor prefsEditor = sharedPreferences.edit();
-		prefsEditor.putString(key, rev);
-		if (!prefsEditor.commit()) {
-			Log.e(TAG, "Failed to store rev key! key=" + key + ". val=" + rev);
-		}
-	}
+        if (access != null) {
+            dropboxApi.getSession().setAccessTokenPair(access);
+        }
 
-	/**
-	 * Load the last 'rev' stored from Dropbox.
-	 * 
-	 * @param key
-	 *            Name of the key in sharedPreferences from which to retrieve
-	 *            the rev value.
-	 * @return The value of the rev to be retrieved.
-	 */
-	private String loadRev(String key) {
-		return sharedPreferences.getString(key, null);
-	}
+        return true;
+    }
 
-	@Override
-	public PullTodoResult pullTodo() {
-		if (!isAvailable()) {
-			Log.d(TAG, "Offline. Not Pulling.");
-			Intent i = new Intent(Constants.INTENT_SET_MANUAL);
-			sendBroadcast(i);
-			return new PullTodoResult(null, null);
-		}
+    @Override
+    public void deauthenticate() {
+        clearAuthToken();
+        dropboxApi.getSession().unlink();
+        TODO_TXT_TMP_FILE.delete();
+        DONE_TXT_TMP_FILE.delete();
+    }
 
-		DropboxFile todoFile = new DropboxFile(
-				getTodoFileRemotePathAndFilename(), TODO_TXT_TMP_FILE,
-				loadRev(Constants.PREF_TODO_REV));
-		DropboxFile doneFile = new DropboxFile(
-				getDoneFileRemotePathAndFilename(), DONE_TXT_TMP_FILE,
-				loadRev(Constants.PREF_DONE_REV));
-		ArrayList<DropboxFile> dropboxFiles = new ArrayList<DropboxFile>(2);
-		dropboxFiles.add(todoFile);
-		dropboxFiles.add(doneFile);
-		
-		DropboxFileDownloader downloader = new DropboxFileDownloader(
-				dropboxApi, dropboxFiles);
-		downloader.pullFiles();
+    @Override
+    public boolean isAuthenticated() {
+        return dropboxApi.getSession().isLinked();
+    }
 
-		File downloadedTodoFile = null;
-		File downloadedDoneFile = null;
-		if (todoFile.getStatus() == DropboxFileStatus.SUCCESS) {
-			downloadedTodoFile = todoFile.getLocalFile();
-			storeRev(Constants.PREF_TODO_REV, todoFile.getLoadedMetadata().rev);
-		}
-		if (doneFile.getStatus() == DropboxFileStatus.SUCCESS) {
-			downloadedDoneFile = doneFile.getLocalFile();
-			storeRev(Constants.PREF_DONE_REV, doneFile.getLoadedMetadata().rev);
-		}
+    @Override
+    public boolean isLoggedIn() {
+        return dropboxApi.getSession().isLinked();
+    }
 
-		return new PullTodoResult(downloadedTodoFile, downloadedDoneFile);
-	}
+    @Override
+    public PullTodoResult pullTodo() {
+        if (!isAvailable()) {
+            Log.d(TAG, "Offline. Not Pulling.");
 
-	@Override
-	public void pushTodo(File todoFile, File doneFile, boolean overwrite) {
-		ArrayList<DropboxFile> dropboxFiles = new ArrayList<DropboxFile>(2);
-		if (todoFile != null) {
-			dropboxFiles.add(new DropboxFile(
-					getTodoFileRemotePathAndFilename(), todoFile,
-					loadRev(Constants.PREF_TODO_REV)));
-		}
+            Intent i = new Intent(Constants.INTENT_SET_MANUAL);
+            sendBroadcast(i);
 
-		if (doneFile != null) {
-			dropboxFiles.add(new DropboxFile(
-					getDoneFileRemotePathAndFilename(), doneFile,
-					loadRev(Constants.PREF_DONE_REV)));
-		}
+            return new PullTodoResult(null, null);
+        }
 
-		DropboxFileUploader uploader = new DropboxFileUploader(dropboxApi,
-				dropboxFiles, overwrite);
-		uploader.pushFiles();
+        DropboxFile todoFile = new DropboxFile(
+                getTodoFileRemotePathAndFilename(), TODO_TXT_TMP_FILE,
+                sharedPreferences
+                        .getFileRevision(TodoPreferences.PREF_TODO_REV));
 
-		if (uploader.getStatus() == DropboxFileStatus.SUCCESS) {
-			if (dropboxFiles.size() > 0) {
-				DropboxFile todoDropboxFile = dropboxFiles.get(0);
-				if (todoDropboxFile.getStatus() == DropboxFileStatus.SUCCESS) {
-					storeRev(Constants.PREF_TODO_REV,
-							todoDropboxFile.getLoadedMetadata().rev);
-				}
-			}
-			if (dropboxFiles.size() > 1) {
-				DropboxFile doneDropboxFile = dropboxFiles.get(1);
-				if (doneDropboxFile.getStatus() == DropboxFileStatus.SUCCESS) {
-					storeRev(Constants.PREF_DONE_REV,
-							doneDropboxFile.getLoadedMetadata().rev);
-				}
-			}
-		}
-	}
+        DropboxFile doneFile = new DropboxFile(
+                getDoneFileRemotePathAndFilename(), DONE_TXT_TMP_FILE,
+                sharedPreferences
+                        .getFileRevision(TodoPreferences.PREF_DONE_REV));
 
-	@Override
-	public boolean startLogin() {
-		dropboxApi.getSession().startAuthentication(
-				todoApplication.getApplicationContext());
-		return true;
-	}
+        ArrayList<DropboxFile> dropboxFiles = new ArrayList<DropboxFile>(2);
+        dropboxFiles.add(todoFile);
+        dropboxFiles.add(doneFile);
 
-	@Override
-	public boolean finishLogin() {
-		if (dropboxApi.getSession().authenticationSuccessful()) {
-			try {
-				dropboxApi.getSession().finishAuthentication();
+        DropboxFileDownloader downloader = new DropboxFileDownloader(
+                dropboxApi, dropboxFiles);
+        downloader.pullFiles();
 
-				AccessTokenPair tokens = dropboxApi.getSession()
-						.getAccessTokenPair();
+        File downloadedTodoFile = null;
+        File downloadedDoneFile = null;
 
-				storeKeys(tokens.key, tokens.secret);
-			} catch (IllegalStateException e) {
-				Log.i("DbAuthLog", "Error authenticating", e);
-				return false;
-			}
-			return true;
-		}
-		return false;
-	}
+        if (todoFile.getStatus() == DropboxFileStatus.SUCCESS) {
+            downloadedTodoFile = todoFile.getLocalFile();
+            sharedPreferences.storeFileRevision(TodoPreferences.PREF_TODO_REV,
+                    todoFile.getLoadedMetadata().rev);
+        }
 
-	void sendBroadcast(Intent intent) {
-		todoApplication.sendBroadcast(intent);
-	}
+        if (doneFile.getStatus() == DropboxFileStatus.SUCCESS) {
+            downloadedDoneFile = doneFile.getLocalFile();
+            sharedPreferences.storeFileRevision(TodoPreferences.PREF_DONE_REV,
+                    doneFile.getLoadedMetadata().rev);
+        }
 
-	void showToast(String string) {
-		Util.showToastLong(todoApplication, string);
-	}
+        return new PullTodoResult(downloadedTodoFile, downloadedDoneFile);
+    }
 
-	DropboxAPI<AndroidAuthSession> getAPI() {
-		return dropboxApi;
-	}
+    @Override
+    public void pushTodo(File todoFile, File doneFile, boolean overwrite) {
+        ArrayList<DropboxFile> dropboxFiles = new ArrayList<DropboxFile>(2);
+        if (todoFile != null) {
+            dropboxFiles.add(new DropboxFile(
+                    getTodoFileRemotePathAndFilename(), todoFile,
+                    sharedPreferences
+                            .getFileRevision(TodoPreferences.PREF_TODO_REV)));
+        }
 
-	String getRemotePath() {
-		return sharedPreferences.getString("todotxtpath", todoApplication
-				.getResources().getString(R.string.TODOTXTPATH_defaultPath));
-	}
+        if (doneFile != null) {
+            dropboxFiles.add(new DropboxFile(
+                    getDoneFileRemotePathAndFilename(), doneFile,
+                    sharedPreferences
+                            .getFileRevision(TodoPreferences.PREF_DONE_REV)));
+        }
 
-	String getTodoFileRemotePathAndFilename() {
-		return getRemotePath() + "/" + TODO_TXT_REMOTE_FILE_NAME;
-	}
+        DropboxFileUploader uploader = new DropboxFileUploader(dropboxApi,
+                dropboxFiles, overwrite);
+        uploader.pushFiles();
 
-	String getDoneFileRemotePathAndFilename() {
-		return getRemotePath() + "/" + DONE_TXT_REMOTE_FILE_NAME;
-	}
+        if (uploader.getStatus() == DropboxFileStatus.SUCCESS) {
+            if (dropboxFiles.size() > 0) {
+                DropboxFile todoDropboxFile = dropboxFiles.get(0);
+                if (todoDropboxFile.getStatus() == DropboxFileStatus.SUCCESS) {
+                    sharedPreferences.storeFileRevision(
+                            TodoPreferences.PREF_TODO_REV,
+                            todoDropboxFile.getLoadedMetadata().rev);
+                }
+            }
+            if (dropboxFiles.size() > 1) {
+                DropboxFile doneDropboxFile = dropboxFiles.get(1);
+                if (doneDropboxFile.getStatus() == DropboxFileStatus.SUCCESS) {
+                    sharedPreferences.storeFileRevision(
+                            TodoPreferences.PREF_DONE_REV,
+                            doneDropboxFile.getLoadedMetadata().rev);
+                }
+            }
+        }
+    }
 
-	@Override
-	public boolean isAvailable() {
-		return Util.isOnline(todoApplication.getApplicationContext());
-	}
+    @Override
+    public boolean startLogin() {
+        dropboxApi.getSession().startAuthentication(
+                todoApplication.getApplicationContext());
 
+        return true;
+    }
+
+    @Override
+    public boolean finishLogin() {
+        if (dropboxApi.getSession().authenticationSuccessful()) {
+            Log.i(TAG, "Dropbox authentication successful.");
+
+            try {
+                dropboxApi.getSession().finishAuthentication();
+
+                Log.i(TAG, "Dropbox authentication complete.");
+
+                AccessTokenPair tokens = dropboxApi.getSession()
+                        .getAccessTokenPair();
+
+                storeKeys(tokens.key, tokens.secret);
+            } catch (IllegalStateException e) {
+                Log.i("DbAuthLog", "Error authenticating", e);
+
+                return false;
+            }
+
+            return true;
+        }
+
+        Log.i(TAG, "Dropbox authentication not successful.");
+
+        return false;
+    }
+
+    void sendBroadcast(Intent intent) {
+        todoApplication.sendBroadcast(intent);
+    }
+
+    void showToast(String string) {
+        Util.showToastLong(todoApplication, string);
+    }
+
+    DropboxAPI<AndroidAuthSession> getAPI() {
+        return dropboxApi;
+    }
+
+    String getRemotePath() {
+        return sharedPreferences.getTodoFilePath();
+    }
+
+    String getTodoFileRemotePathAndFilename() {
+        return getRemotePath() + "/" + TODO_TXT_REMOTE_FILE_NAME;
+    }
+
+    String getDoneFileRemotePathAndFilename() {
+        return getRemotePath() + "/" + DONE_TXT_REMOTE_FILE_NAME;
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return Util.isOnline(todoApplication.getApplicationContext());
+    }
+
+    @Override
+    public List<RemoteFolder> getSubFolders(String path) {
+        List<RemoteFolder> results = new ArrayList<RemoteFolder>();
+
+        try {
+            Log.d(TAG, "getting file listiing for path " + path);
+
+            Entry metadata = dropboxApi.metadata(path, 0, null, true, null);
+
+            Log.d(TAG, "num entries returned: " + metadata.contents.size());
+
+            for (Entry e : metadata.contents) {
+                if (e.isDir && !e.isDeleted) {
+                    results.add(new DropboxRemoteFolder(e));
+                }
+            }
+        } catch (DropboxServerException dse) {
+            if (dse.error != DropboxServerException._404_NOT_FOUND) {
+                Log.e(TAG, "Error getting folders for path: " + path);
+                Log.e(TAG, "Dropbox returned error code: " + dse.error);
+
+                throw new RemoteException("Failed to get folder listing from Dropbox", dse);
+            }
+
+            // A 404 is OK. We will create the directory if necessary when we
+            // push
+            Log.i(TAG, "Remote path not found: " + path);
+        } catch (DropboxException e) {
+            Log.e(TAG, "Error getting folders for path: " + path);
+
+            throw new RemoteException("Failed to get folder listing from Dropbox", e);
+        }
+
+        return results;
+    }
+
+    @Override
+    public RemoteFolder getFolder(final String path) {
+        return new DropboxRemoteFolder(path);
+    }
 }

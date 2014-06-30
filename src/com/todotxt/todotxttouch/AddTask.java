@@ -1,57 +1,63 @@
 /**
- * This file is part of Todo.txt Touch, an Android app for managing your todo.txt file (http://todotxt.com).
+ * This file is part of Todo.txt for Android, an app for managing your todo.txt file (http://todotxt.com).
  *
- * Copyright (c) 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * Copyright (c) 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  *
  * LICENSE:
  *
- * Todo.txt Touch is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
- * License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
+ * Todo.txt for Android is free software: you can redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
  * later version.
  *
- * Todo.txt Touch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
- * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * Todo.txt for Android is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the 
+ * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
  * details.
  *
- * You should have received a copy of the GNU General Public License along with Todo.txt Touch.  If not, see
+ * You should have received a copy of the GNU General Public License along with Todo.txt for Android. If not, see
  * <http://www.gnu.org/licenses/>.
  *
- * @author Todo.txt contributors <todotxt@yahoogroups.com>
+ * Todo.txt for Android's source code is available at https://github.com/ginatrapani/todo.txt-android
+ *
+ * @author Todo.txt for Android contributors <todotxt@yahoogroups.com>
  * @license http://www.gnu.org/licenses/gpl.html
- * @copyright 2009-2012 Todo.txt contributors (http://todotxt.com)
+ * @copyright 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
  */
 package com.todotxt.todotxttouch;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Random;
 
-import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.DialogInterface;
+import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.util.Log;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
-import android.view.View.OnClickListener;
+import android.view.View.OnKeyListener;
 import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemSelectedListener;
-import android.widget.Button;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.Spinner;
+import android.widget.ListView;
 import android.widget.TextView;
 
+import com.actionbarsherlock.app.SherlockActivity;
+import com.actionbarsherlock.view.Menu;
+import com.actionbarsherlock.view.MenuItem;
+import com.todotxt.todotxttouch.remote.RemoteClient;
 import com.todotxt.todotxttouch.task.Priority;
-import com.todotxt.todotxttouch.task.PriorityTextSplitter;
 import com.todotxt.todotxttouch.task.Task;
 import com.todotxt.todotxttouch.task.TaskBag;
-import com.todotxt.todotxttouch.util.CursorPositionCalculator;
-import com.todotxt.todotxttouch.util.Strings;
 import com.todotxt.todotxttouch.util.Util;
 
-public class AddTask extends Activity {
-
+public class AddTask extends SherlockActivity {
 	private final static String TAG = AddTask.class.getSimpleName();
 
 	private ProgressDialog m_ProgressDialog = null;
@@ -62,13 +68,62 @@ public class AddTask extends Activity {
 
 	private TaskBag taskBag;
 
-	private TextView titleBarLabel;
+	private EditText textInputField;
 
 	private String share_text;
 
-	private Spinner priorities;
-	private Spinner contexts;
-	private Spinner projects;
+	private ArrayList<String> mLists;
+
+	private ListView mDrawerList;
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getSupportMenuInflater().inflate(R.menu.add_task, menu);
+
+		if (hasDrawer()) {
+			menu.findItem(R.id.menu_add_tag).setVisible(false);
+		}
+
+		return true;
+	}
+
+	private void noteToSelf(Intent intent) {
+		String task = intent.getStringExtra(Intent.EXTRA_TEXT);
+		taskBag.addAsTask(task);
+		m_app.m_prefs.storeNeedToPush(true);
+		sendBroadcast(new Intent(Constants.INTENT_START_SYNC_TO_REMOTE));
+		m_app.showToast(R.string.taskadded);
+	}
+
+	@Override
+	public boolean onMenuItemSelected(int featureId, MenuItem item) {
+		switch (item.getItemId()) {
+		case android.R.id.home:
+			finish();
+
+			break;
+		case R.id.menu_save_task:
+			final String input = textInputField.getText().toString();
+
+			if (input.trim().equalsIgnoreCase("")) {
+				Util.showToastLong(this, R.string.add_empty_task);
+			} else {
+				addEditAsync(input);
+			}
+
+			break;
+		case R.id.menu_add_prio:
+			showPrioMenu(findViewById(R.id.menu_add_prio));
+
+			break;
+		case R.id.menu_add_tag:
+			showProjectContextMenu();
+
+			break;
+		}
+
+		return true;
+	}
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -76,203 +131,253 @@ public class AddTask extends Activity {
 
 		setContentView(R.layout.add_task);
 
+		getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+
 		m_app = (TodoApplication) getApplication();
-		taskBag = m_app.getTaskBag();	
-		
+
+		// FIXME: save intent so we can come back after login
+		if (!isAuthenticated()) {
+			Intent i = new Intent(this, LoginScreen.class);
+			startActivity(i);
+			finish();
+
+			return;
+		}
+
+		taskBag = m_app.getTaskBag();
+
 		sendBroadcast(new Intent(Constants.INTENT_START_SYNC_WITH_REMOTE));
 
 		final Intent intent = getIntent();
 		final String action = intent.getAction();
+
 		// create shortcut and exit
 		if (Intent.ACTION_CREATE_SHORTCUT.equals(action)) {
 			Log.d(TAG, "Setting up shortcut icon");
+
 			setupShortcut();
 			finish();
+
 			return;
 		} else if (Intent.ACTION_SEND.equals(action)) {
 			Log.d(TAG, "Share");
+
 			share_text = (String) intent
 					.getCharSequenceExtra(Intent.EXTRA_TEXT);
+
 			Log.d(TAG, share_text);
+		} else if ("com.google.android.gm.action.AUTO_SEND".equals(action)) {
+			// Called as note to self from google search/now
+			noteToSelf(intent);
+			finish();
+
+			return;
 		}
 
-		// title bar label
-		titleBarLabel = (TextView) findViewById(R.id.title_bar_label);
-
 		// text
-		final EditText textInputField = (EditText) findViewById(R.id.taskText);
+		textInputField = (EditText) findViewById(R.id.taskText);
 		textInputField.setGravity(Gravity.TOP);
+
+		// Set up fortune hint text
+		Random rand = new Random();
+		int fortune_hint_index = Math.abs(rand.nextInt()) % 5;
+		int fortune_hint_text;
+
+		switch (fortune_hint_index) {
+		case 0:
+			fortune_hint_text = R.string.tasktexthint0;
+
+			break;
+		case 1:
+			fortune_hint_text = R.string.tasktexthint1;
+
+			break;
+		case 2:
+			fortune_hint_text = R.string.tasktexthint2;
+
+			break;
+		case 3:
+			fortune_hint_text = R.string.tasktexthint3;
+
+			break;
+		case 4:
+			fortune_hint_text = R.string.tasktexthint4;
+
+			break;
+		default:
+			fortune_hint_text = R.string.tasktexthint2;
+		}
+
+		textInputField.setHint(fortune_hint_text);
 
 		if (share_text != null) {
 			textInputField.setText(share_text);
 		}
-		
+
 		Task iniTask = null;
 
 		Task task = (Task) getIntent().getSerializableExtra(
 				Constants.EXTRA_TASK);
+
 		if (task != null) {
 			m_backup = task;
 			iniTask = m_backup;
 			textInputField.setText(task.inFileFormat());
 			setTitle(R.string.updatetask);
-			titleBarLabel.setText(R.string.updatetask);
 		} else {
 			setTitle(R.string.addtask);
-			titleBarLabel.setText(R.string.addtask);
 
-			if (textInputField.getText().length() == 0)
-			{
+			if (textInputField.getText().length() == 0) {
 				@SuppressWarnings("unchecked")
-				ArrayList<Priority> prios = (ArrayList<Priority>)intent.getSerializableExtra(Constants.EXTRA_PRIORITIES_SELECTED);
+				ArrayList<Priority> prios = (ArrayList<Priority>) intent
+						.getSerializableExtra(Constants.EXTRA_PRIORITIES_SELECTED);
 				@SuppressWarnings("unchecked")
-				ArrayList<String> contexts = (ArrayList<String>) intent.getSerializableExtra(Constants.EXTRA_CONTEXTS_SELECTED);
+				ArrayList<String> contexts = (ArrayList<String>) intent
+						.getSerializableExtra(Constants.EXTRA_CONTEXTS_SELECTED);
 				@SuppressWarnings("unchecked")
-				ArrayList<String> projects = (ArrayList<String>) intent.getSerializableExtra(Constants.EXTRA_PROJECTS_SELECTED);
+				ArrayList<String> projects = (ArrayList<String>) intent
+						.getSerializableExtra(Constants.EXTRA_PROJECTS_SELECTED);
 
 				iniTask = new Task(1, "");
 				iniTask.initWithFilters(prios, contexts, projects);
 			}
 		}
-		
+
+		if (hasDrawer()) {
+			mDrawerList = (ListView) findViewById(R.id.left_drawer);
+			mDrawerList.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
+			mLists = new ArrayList<String>();
+			mDrawerList.setAdapter(new ArrayAdapter<String>(this,
+					R.layout.drawer_list_item, R.id.left_drawer_text, mLists));
+			updateNavigationDrawer();
+
+			// Set the list's click listener
+			mDrawerList.setOnItemClickListener(new DrawerItemClickListener());
+			textInputField.setOnKeyListener(new OnKeyListener() {
+				@Override
+				public boolean onKey(View arg0, int arg1, KeyEvent arg2) {
+					updateNavigationDrawer();
+
+					return false;
+				}
+			});
+		}
+
 		textInputField.setSelection(textInputField.getText().toString()
 				.length());
-		
-		// priorities
-		priorities = (Spinner) findViewById(R.id.priorities);
-		final ArrayList<String> prioArr = new ArrayList<String>();
-		prioArr.add(0,this.getApplicationContext().getString(R.string.add_task_priority_btn));
-		prioArr.addAll(Priority.rangeInCode(Priority.A, Priority.E));
-		priorities.setAdapter(Util.newSpinnerAdapter(this, prioArr));
-		if (iniTask != null) {
-			int index = prioArr.indexOf(iniTask.getPriority().getCode());
-			priorities.setSelection(index < 0 ? 0 : index);
-		}
-		priorities.setOnItemSelectedListener(new OnItemSelectedListener() {
-			@Override
-			public void onItemSelected(AdapterView<?> arg0, View arg1,
-					int position, long id) {
-				int cursorPosition = textInputField.getSelectionStart();
-				String currentText = textInputField.getText().toString();
-				Priority priority = Priority.NONE;
-				if (position > 0) {
-					String item = prioArr.get(position);
-					priority = Priority.toPriority(item);
-				}
-				String text = PriorityTextSplitter.getInstance().split(
-						currentText).text;
-				textInputField.setText(Strings.insertPadded(text, 0,
-						priority.inFileFormat()));
-				textInputField.setSelection(CursorPositionCalculator.calculate(
-						cursorPosition, currentText, textInputField.getText()
-								.toString()));
-			}
+		textInputField.requestFocus();
+	}
 
-			@Override
-			public void onNothingSelected(AdapterView<?> arg0) {
-			}
-		});
+	private boolean isAuthenticated() {
+		RemoteClient remoteClient = m_app.getRemoteClientManager()
+				.getRemoteClient();
 
-		// projects
-		projects = (Spinner) findViewById(R.id.projects);
-		final ArrayList<String> projectsArr = taskBag.getProjects();
-		projectsArr.add(0,this.getApplicationContext().getString(R.string.add_task_project_btn));
-		projects.setAdapter(Util.newSpinnerAdapter(this, projectsArr));
-		
-		if (iniTask != null) {
-			List<String> ps = iniTask.getProjects();
-			
-			if ((ps != null) && (ps.size() == 1))
-			{
-				int index = projectsArr.indexOf(ps.get(0));
-				projects.setSelection(index < 0 ? 0 : index);
-			}
+		return remoteClient.isAuthenticated();
+	}
+
+	private void updateNavigationDrawer() {
+		mLists.clear();
+		mLists.addAll(labelsInTaskbagAndText());
+		((ArrayAdapter<?>) mDrawerList.getAdapter()).notifyDataSetChanged();
+	}
+
+	private void showProjectContextMenu() {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		final ArrayList<String> labels = new ArrayList<String>();
+		labels.addAll(labelsInTaskbagAndText());
+
+		if (labels.size() == 0) {
+			onHelpClick();
+			return;
 		}
 
-		projects.setOnItemSelectedListener(new OnItemSelectedListener() {
+		builder.setItems(labels.toArray(new String[0]), new OnClickListener() {
 			@Override
-			public void onItemSelected(AdapterView<?> arg0, View arg1,
-					int position, long id) {
-				if (position > 0) {
-					int cursorPosition = textInputField.getSelectionStart();
-					String currentText = textInputField.getText().toString();
-					String item = "+" + projectsArr.get(position);
-					textInputField.setText(Strings.insertPaddedIfNeeded(currentText,
-							cursorPosition, item));
-					textInputField.setSelection(CursorPositionCalculator
-							.calculate(cursorPosition, currentText,
-									textInputField.getText().toString()));
-				}
-				projects.setSelection(0);
-			}
-
-			@Override
-			public void onNothingSelected(AdapterView<?> arg0) {
+			public void onClick(DialogInterface arg0, int which) {
+				replaceTextAtSelection(labels.get(which) + " ");
 			}
 		});
 
-		// contexts
-		contexts = (Spinner) findViewById(R.id.contexts);
-		final ArrayList<String> contextsArr = taskBag.getContexts();
-		contextsArr.add(0, this.getApplicationContext().getString(R.string.add_task_context_btn));
-		contexts.setAdapter(Util.newSpinnerAdapter(this, contextsArr));
-		
-		if (iniTask != null) {
-			List<String> cs = iniTask.getContexts();
-			
-			if ((cs != null) && (cs.size() == 1))
-			{
-				int index = contextsArr.indexOf(cs.get(0));
-				contexts.setSelection(index < 0 ? 0 : index);
+		// Create the AlertDialog
+		AlertDialog dialog = builder.create();
+		dialog.setTitle(R.string.addcontextproject);
+		dialog.show();
+	}
+
+	private void showPrioMenu(View v) {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		final Priority[] priorities = Priority.values();
+		ArrayList<String> priorityCodes = new ArrayList<String>();
+
+		for (Priority prio : priorities) {
+			priorityCodes.add(prio.getCode());
+		}
+
+		builder.setItems(priorityCodes.toArray(new String[0]),
+				new OnClickListener() {
+					@Override
+					public void onClick(DialogInterface arg0, int which) {
+						replacePriority(priorities[which].getCode());
+					}
+				});
+
+		// Create the AlertDialog
+		AlertDialog dialog = builder.create();
+		dialog.setTitle(R.string.assignpriority);
+		dialog.show();
+	}
+
+	private void replacePriority(CharSequence newPrio) {
+		// save current selection and length
+		int start = textInputField.getSelectionStart();
+		int end = textInputField.getSelectionEnd();
+		int length = textInputField.getText().length();
+		int sizeDelta;
+		ArrayList<String> lines = new ArrayList<String>();
+
+		for (String line : textInputField.getText().toString()
+				.split("\\r\\n|\\r|\\n")) {
+			lines.add(line);
+		}
+
+		// figure out what task the cursor is on
+		CharSequence enteredText = textInputField.getText().toString();
+		CharSequence textToCursor = enteredText.subSequence(0, start);
+		ArrayList<String> linesBeforeCursor = new ArrayList<String>();
+
+		for (String line : textToCursor.toString().split("\\r\\n|\\r|\\n")) {
+			linesBeforeCursor.add(line);
+		}
+
+		int currentLine = 0;
+
+		if (linesBeforeCursor.size() > 0) {
+			currentLine = linesBeforeCursor.size() - 1;
+		}
+
+		Task t = new Task(0, lines.get(currentLine));
+		t.setPriority(Priority.toPriority(newPrio.toString()));
+		lines.set(currentLine, t.inFileFormat());
+		textInputField.setText(Util.join(lines, "\n"));
+
+		// restore selection
+		sizeDelta = textInputField.getText().length() - length;
+		textInputField.setSelection(start + sizeDelta, end + sizeDelta);
+	}
+
+	private void replaceTextAtSelection(CharSequence title) {
+		int start = textInputField.getSelectionStart();
+		int end = textInputField.getSelectionEnd();
+
+		if (start == end && start != 0) {
+			// no selection prefix with space if needed
+			if (!(textInputField.getText().charAt(start - 1) == ' ')) {
+				title = " " + title;
 			}
 		}
-		
-		contexts.setOnItemSelectedListener(new OnItemSelectedListener() {
-			@Override
-			public void onItemSelected(AdapterView<?> arg0, View arg1,
-					int position, long id) {
-				if (position > 0) {
-					int cursorPosition = textInputField.getSelectionStart();
-					String currentText = textInputField.getText().toString();
-					String item = "@" + contextsArr.get(position);
-					textInputField.setText(Strings.insertPaddedIfNeeded(currentText,
-							cursorPosition, item));
-					textInputField.setSelection(CursorPositionCalculator
-							.calculate(cursorPosition, currentText,
-									textInputField.getText().toString()));
-				}
-				contexts.setSelection(0);
-			}
 
-			@Override
-			public void onNothingSelected(AdapterView<?> arg0) {
-			}
-		});
-
-		// cancel
-		Button cancel = (Button) findViewById(R.id.cancel);
-		cancel.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				finish();
-			}
-		});
-
-		// add
-		Button addBtn = (Button) findViewById(R.id.addTask);
-		if (m_backup != null) {
-			addBtn.setText(R.string.update);
-		}
-		addBtn.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				// strip line breaks
-				final String input = textInputField.getText().toString()
-						.replaceAll("\\r\\n|\\r|\\n", " ");
-				addEditAsync(input);
-			}
-
-		});
+		textInputField.getText().replace(Math.min(start, end),
+				Math.max(start, end), title, 0, title.length());
 	}
 
 	private void addEditAsync(final String input) {
@@ -287,18 +392,24 @@ public class AddTask extends Activity {
 				try {
 					Task task = (Task) params[0];
 					String input = (String) params[1];
+
 					if (task != null) {
+						input = input.replaceAll("\\r\\n|\\r|\\n", " ");
 						task.update(input);
 						taskBag.update(task);
 					} else {
-						taskBag.addAsTask(input);
+						for (String text : input.split("\\r\\n|\\r|\\n")) {
+							taskBag.addAsTask(text);
+						}
 					}
 
 					// make widgets update
 					m_app.broadcastWidgetUpdate();
+
 					return true;
 				} catch (Exception e) {
 					Log.e(TAG, "input: " + input + " - " + e.getMessage());
+
 					return false;
 				}
 			}
@@ -316,6 +427,7 @@ public class AddTask extends Activity {
 							: getString(R.string.add_task_failed);
 					Util.showToastLong(AddTask.this, res);
 				}
+
 				m_ProgressDialog.dismiss();
 			}
 		}.execute(m_backup, input);
@@ -339,29 +451,67 @@ public class AddTask extends Activity {
 	@Override
 	protected void onSaveInstanceState(Bundle outState) {
 		super.onSaveInstanceState(outState);
+
 		if (m_ProgressDialog != null) {
 			m_ProgressDialog.dismiss();
 		}
 	}
 
-	/** Handle priority spinner **/
-	public void onPriorityClick(View v) {
-		priorities.performClick();
-	}
-
-	/** Handle project spinner **/
-	public void onProjectClick(View v) {
-		projects.performClick();
-	}
-
-	/** Handle context spinner **/
-	public void onContextClick(View v) {
-		contexts.performClick();
-	}
-
 	/** Handle help message **/
-	public void onHelpClick(View v) {
-		Intent intent = new Intent(v.getContext(), HelpActivity.class);
+	public void onHelpClick() {
+		Intent intent = new Intent(getApplicationContext(), HelpActivity.class);
 		startActivity(intent);
+	}
+
+	private ArrayList<String> labelsInTaskbagAndText() {
+		/*
+		 * Returns the defined labels in the taskbag and the current task being
+		 * added. This way when adding multiple tasks labels from previous lines
+		 * will be included as well
+		 */
+		ArrayList<String> labels = new ArrayList<String>();
+		Task temp = new Task(1, textInputField.getText().toString());
+
+		ArrayList<String> contexts = taskBag.getContexts(false);
+		contexts.addAll(temp.getContexts());
+		Collections.sort(contexts);
+
+		for (String item : contexts) {
+			labels.add("@" + item);
+		}
+
+		ArrayList<String> projects = taskBag.getProjects(false);
+		projects.addAll(temp.getProjects());
+		Collections.sort(projects);
+
+		for (String item : projects) {
+			labels.add("+" + item);
+		}
+
+		// Pass through a LinkedHashSet to remove duplicates without
+		// messing up sort order
+		return new ArrayList<String>(new LinkedHashSet<String>(labels));
+	}
+
+	/**
+	 * Returns true if the left drawer is shown.
+	 */
+	private boolean hasDrawer() {
+		return findViewById(R.id.left_drawer) != null;
+	}
+
+	private class DrawerItemClickListener implements
+			AdapterView.OnItemClickListener {
+		@Override
+		public void onItemClick(AdapterView<?> parent, View view, int position,
+				long id) {
+			TextView tv = (TextView) view.findViewById(R.id.left_drawer_text);
+			String itemTitle = tv.getText().toString();
+
+			Log.v(TAG, "Clicked on drawer " + itemTitle);
+
+			replaceTextAtSelection(itemTitle);
+			mDrawerList.clearChoices();
+		}
 	}
 }

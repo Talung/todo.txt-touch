@@ -18,10 +18,10 @@ import shutil
 #change this to the full path to your ThinkUp installation. E.g., 
 # "/home/username/yourpathto/ThinkUp" or 
 # "C:/yourpathto/ThinkUp"
-TODOTXTOUCH_HOME = '/Users/gina/Documents/data/code/todo.txt-touch'
+TODOTXTOUCH_HOME = '/Users/gina/Documents/data/code/todo.txt-android'
 
-excludedir = ["/assets", "/.git", "/bin", "/extras", "/gen", "/libs", "/res", "/tests/res"]
-ignorefns = ["default.properties", "AndroidManifest.xml"]
+excludedir = ["/assets", "/.git", "/bin", "/extras", "/gen", "/libs", "/res", "/tests/res", "/dependencies"]
+ignorefns = ["default.properties"]
 license_line = "http://www.gnu.org/licenses/gpl.html"
 header_fname = "/extras/scripts/header_content_java.txt"
 
@@ -53,16 +53,16 @@ def update_source(filename, shortfn, copyright):
   utfstr = chr(0xef)+chr(0xbb)+chr(0xbf)
   fdata = file(filename,"r+").read()
   # arghh
-  has_cp = (fdata.find("LICENSE") > 0) and (fdata.find("This file is part of Todo.txt Touch") > 0)
+  has_cp = (fdata.find("LICENSE") > 0) and (fdata.find("This file is part of Todo.txt") > 0)
   # print "has_cp: %s" % has_cp
   if not has_cp:
     made_mods = True
     if not quiet:
       print >> sys.stderr, "updating "+filename
     isUTF = False
-    nl = get_copyright_namelist(filename, False)
-    filename_str = filename.replace(TODOTXTOUCH_HOME, "Todo.txt Touch")
-    copyright_str = " * " + filename_str + "\n *\n * Copyright (c) 2009-2012 " + nl +"\n"
+    nl = ""
+    filename_str = filename.replace(TODOTXTOUCH_HOME, "Todo.txt")
+    copyright_str = ""
 
     javaHeader = ""
     if (fdata.startswith(utfstr)):
@@ -73,13 +73,19 @@ def update_source(filename, shortfn, copyright):
       #javaHeader = "package com.todotxt.todotxttouch;\n"
 
     tempfn = "/tmp" + shortfn
-    nla = get_copyright_namelist(filename, True)
-    nlc = get_copyright_namelist(filename, False)
-    fdata = javaHeader + "/**\n *\n" + copyright_str + copyright + build_docblock(nla, nlc) + fdata
+    nla = ""
+    nlc = "Todo.txt contributors (http://todotxt.com)"
+    fdata = javaHeader + "/**\n" + copyright_str + copyright + build_docblock(nla, nlc) + fdata
     if (isUTF):
       file(tempfn,"w").write(utfstr+fdata)
+      os.chmod(tempfn, 0644)
+      os.system( 'chown gina:staff ' + tempfn)
+      #os.chown(tempfn, 'gina', 'staff')
     else:
       file(tempfn,"w").write(fdata)
+      os.chmod(tempfn, 0644)         
+      os.system( 'chown gina:staff ' + tempfn)
+      #os.chown(tempfn, 'gina', 'staff')
       if backup:
         #os.rename(filename, filename+"~") can cause "Invalid cross-device link using os.rename error in Cygwin
         shutil.move(filename, filename+"~")
@@ -120,7 +126,7 @@ def build_docblock(nla, nlc):
     
 def build_docblock_lic_copy(nl):
   global license_line
-  return " * @license %s\n * @copyright 2009-2012 %s\n" % (license_line, nl)
+  return ""
 
 def get_copyright_namelist(filename, emailsp):
 

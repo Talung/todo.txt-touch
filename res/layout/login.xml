@@ -1,81 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <!--
-This file is part of Todo.txt Touch, an Android app for managing your todo.txt file (http://todotxt.com).
+This file is part of Todo.txt, an Android app for managing your todo.txt file (http://todotxt.com).
 
-Copyright (c) 2009-2012 Todo.txt contributors (http://todotxt.com)
+Copyright (c) 2009-2013 Todo.txt contributors (http://todotxt.com)
 
 LICENSE:
 
-Todo.txt Touch is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+Todo.txt is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
 License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
 later version.
 
-Todo.txt Touch is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+Todo.txt is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
 warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
 details.
 
-You should have received a copy of the GNU General Public License along with Todo.txt Touch.  If not, see
+You should have received a copy of the GNU General Public License along with Todo.txt.  If not, see
 <http://www.gnu.org/licenses/>.
 
 @author Todo.txt contributors <todotxt@yahoogroups.com>
 @license http://www.gnu.org/licenses/gpl.html
-@copyright 2009-2012 Todo.txt contributors (http://todotxt.com)
+@copyright 2009-2013 Todo.txt contributors (http://todotxt.com)
 -->
 
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-	android:id="@+id/loginbackground"
-	android:layout_width="fill_parent"
-	android:layout_height="fill_parent" 
-	android:background="@drawable/login_background">
+    android:id="@+id/loginbackground"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:background="@drawable/login_background" >
 
-<ImageView android:id="@+id/todos_img" 
-	android:layout_width="wrap_content"
-	android:layout_height="wrap_content" 
-    android:layout_gravity="center_horizontal|bottom"
-	android:src="@drawable/todotxt_touch_256" android:contentDescription="@string/app_label"
-	android:paddingBottom="5dp"/>
-	
-<LinearLayout
-	android:orientation="vertical" 
-	android:layout_width="fill_parent"
-	android:layout_height="fill_parent">
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:orientation="vertical" >
 
-<LinearLayout
-	android:orientation="horizontal"
-	android:layout_width="wrap_content"
-	android:layout_height="wrap_content" 
-	android:layout_gravity="center_horizontal|top"
-	android:paddingBottom="15dp">
-	
-	<TextView android:id="@+id/title"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:text="@string/first_title_word"
-		android:textSize="12pt"
-		android:typeface="monospace"
-		android:textColor="@color/white"
-		android:paddingTop="15dp"
-		android:shadowColor="@color/black"
-		android:shadowRadius="1.0"
-	/>
-	<TextView android:id="@+id/title_2"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:text="@string/second_title_word"
-		android:textSize="12pt"
-		android:typeface="serif"
-		android:textStyle="italic"
-		android:shadowColor="@color/black"
-		android:shadowRadius="1.0"
-	/>
-	</LinearLayout>
-	
-	<Button android:id="@+id/login"
-		android:layout_width="wrap_content"
-		android:layout_height="wrap_content"
-		android:layout_gravity="center_horizontal"
-		android:textSize="8pt"
-		android:text="@string/login_screen_button" />
-</LinearLayout>
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:layout_gravity="center_horizontal|center_vertical"
+            android:orientation="vertical" >
+
+            <TextView
+                android:id="@+id/title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal|center_vertical"
+                android:paddingBottom="10dp"
+                android:shadowColor="@color/black"
+                android:shadowRadius="1.0"
+                android:text="@string/welcome_message"
+                android:textColor="@color/white"
+                android:textSize="8pt" />
+
+            <Button
+                android:id="@+id/login"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:drawableLeft="@drawable/dropbox_logo"
+                android:text="@string/login_screen_button" />
+        </LinearLayout>
+    </RelativeLayout>
+
 </FrameLayout>

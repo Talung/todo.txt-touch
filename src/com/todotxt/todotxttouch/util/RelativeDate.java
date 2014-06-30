@@ -1,8 +1,33 @@
 /**
- * This file is part of Todo.txt Touch, an Android app for managing your todo.txt file (http://todotxt.com).
+ * This file is part of Todo.txt for Android, an app for managing your todo.txt file (http://todotxt.com).
+ *
+ * Copyright (c) 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
+ *
+ * LICENSE:
+ *
+ * Todo.txt for Android is free software: you can redistribute it and/or modify it under the terms of the GNU General
+ * Public License as published by the Free Software Foundation, either version 2 of the License, or (at your option) any
+ * later version.
+ *
+ * Todo.txt for Android is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the 
+ * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with Todo.txt for Android. If not, see
+ * <http://www.gnu.org/licenses/>.
+ *
+ * Todo.txt for Android's source code is available at https://github.com/ginatrapani/todo.txt-android
+ *
+ * @author Todo.txt for Android contributors <todotxt@yahoogroups.com>
+ * @license http://www.gnu.org/licenses/gpl.html
+ * @copyright 2009-2013 Todo.txt for Android contributors (http://todotxt.com)
+ */
+/**
+ * This file is part of Todo.txt, an Android app for managing your todo.txt file (http://todotxt.com).
  * 
  * Thanks to: http://kurtischiappone.com/programming/java/relative-date
  */
+
 package com.todotxt.todotxttouch.util;
 
 import java.text.SimpleDateFormat;
@@ -10,127 +35,90 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 
 import com.todotxt.todotxttouch.R;
 import com.todotxt.todotxttouch.TodoApplication;
 
+@SuppressLint("SimpleDateFormat")
 public class RelativeDate {
+    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    private static Context context = TodoApplication.getAppContetxt();
 
-	private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-	private static Context context = TodoApplication.getAppContetxt();
-	
-	
-	/**
-	 * This method computes the relative date according to the Calendar being
-	 * passed in and the number of years, months, days, etc. that differ. This
-	 * will compute both past and future relative dates. E.g., "one day ago" and
-	 * "one day from now".
-	 * <p>
-	 * <strong>NOTE:</strong> If the calendar date relative to "now" is older
-	 * than one day, we display the actual date in its default format as
-	 * specified by this class. The date format may be changed by calling
-	 * {@link RelativeDate#setDateFormat(SimpleDateFormat)} If you don't want to
-	 * show the actual date, but you want to show the relative date for days,
-	 * months, and years, you can add the other cases in by copying the logic
-	 * for hours, minutes, seconds.
-	 * 
-	 * @param calendar
-	 * @param years
-	 * @param months
-	 * @param days
-	 * @param hours
-	 * @param minutes
-	 * @param seconds
-	 * @return String representing the relative date
-	 */
+    // Doesn't handle leap year, etc, but we don't need to be very
+    // accurate. This is just for human readable date displays.
+    private static final long SECOND = 1000; // milliseconds
+    private static final long HOUR = 3600 * SECOND;
+    private static final long DAY = 24 * HOUR;
+    private static final long YEAR = 365 * DAY;
 
-	private static String computeRelativeDate(Calendar calendar, int years,
-			int months, int days, int hours, int minutes, int seconds) {
-		
-		String date = sdf.format(calendar.getTime());
+    /**
+     * This method returns a String representing the relative date by comparing
+     * the Calendar being passed in to the date / time that it is right now.
+     * 
+     * @param calendar
+     * @return String representing the relative date
+     */
 
-		if (years == 0 && months == 0) {
-			if (days < -1)
-				return context.getString(R.string.dates_days_ago, Math.abs(days));
-			else if (days == -1)
-				return context.getString(R.string.dates_one_day_ago);
-			else if (days == 0)
-				return context.getString(R.string.dates_today);		} else if (years == 0 || years == -1) {
-			if (years == -1) {
-				months = 11 - months
-						+ Calendar.getInstance().get(Calendar.MONTH);
-				if (months == 1)
-					return context.getString(R.string.dates_one_month_ago);
-				else
-					return context.getString(R.string.dates_months_ago, months);
-			} else {
-				if (months != -1)
-					return context.getString(R.string.dates_months_ago,Math.abs(months));
-				else
-					return context.getString(R.string.dates_one_month_ago);
-			}
-		} else {
-			return date;
-		}
-		return date;
+    public static String getRelativeDate(Calendar calendar) {
+        Calendar today = new GregorianCalendar();
+        today.set(GregorianCalendar.HOUR_OF_DAY, 0);
+        today.set(GregorianCalendar.MINUTE, 0);
+        today.set(GregorianCalendar.SECOND, 0);
+        today.set(GregorianCalendar.MILLISECOND, 0);
 
-	}
+        return getRelativeDate(today, calendar);
+    }
 
-	/**
-	 * This method returns a String representing the relative date by comparing
-	 * the Calendar being passed in to the date / time that it is right now.
-	 * 
-	 * @param calendar
-	 * @return String representing the relative date
-	 */
+    public static String getRelativeDate(Calendar d1, Calendar d2) {
+        long diff = d1.getTimeInMillis() - d2.getTimeInMillis();
 
-	public static String getRelativeDate(Calendar calendar) {
+        if (diff < 0 || diff >= YEAR) {
+            // future or far in past,
+            // just return yyyy-mm-dd
+            return sdf.format(d2.getTime());
+        }
 
-		Calendar now = GregorianCalendar.getInstance();
+        if (diff >= 60 * DAY) {
+            // N months ago
+            long months = diff / (30 * DAY);
 
-		int years = calendar.get(Calendar.YEAR) - now.get(Calendar.YEAR);
-		int months = calendar.get(Calendar.MONTH) - now.get(Calendar.MONTH);
-		int days = calendar.get(Calendar.DAY_OF_MONTH)
-				- now.get(Calendar.DAY_OF_MONTH);
-		int hours = calendar.get(Calendar.HOUR_OF_DAY)
-				- now.get(Calendar.HOUR_OF_DAY);
-		int minutes = calendar.get(Calendar.MINUTE) - now.get(Calendar.MINUTE);
-		int seconds = calendar.get(Calendar.SECOND) - now.get(Calendar.SECOND);
+            return context.getString(R.string.dates_months_ago, months);
+        }
 
-		return computeRelativeDate(calendar, years, months, days, hours,
-				minutes, seconds);
+        if (diff >= 30 * DAY) {
+            // 1 month ago
+            return context.getString(R.string.dates_one_month_ago);
+        }
 
-	}
+        if (diff >= 2 * DAY) {
+            // more than 2 days ago
+            long days = diff / DAY;
 
-	/**
-	 * This method returns a String representing the relative date by comparing
-	 * the Date being passed in to the date / time that it is right now.
-	 * 
-	 * @param date
-	 * @return String representing the relative date
-	 */
+            return context.getString(R.string.dates_days_ago, days);
+        }
 
-	public static String getRelativeDate(Date date) {
-		Calendar converted = GregorianCalendar.getInstance();
-		converted.setTime(date);
-		return getRelativeDate(converted);
-	}
+        if (diff >= 1 * DAY) {
+            // 1 day ago
+            return context.getString(R.string.dates_one_day_ago);
+        }
 
-	/**
-	 * This method sets the date format. This is used when the relative date is
-	 * beyond one day. E.g., if the relative date is > 1 day, we will display
-	 * the date in the format: h:mm a MMM dd, yyyy
-	 * <p>
-	 * This can be changed by passing in a new simple date format and then
-	 * calling {@link RelativeDate#getRelativeDate(Calendar)} or
-	 * {@link RelativeDate#getRelativeDate(Date)}.
-	 * 
-	 * @param dateFormat
-	 */
+        // today
+        return context.getString(R.string.dates_today);
+    }
 
-	public static void setDateFormat(SimpleDateFormat dateFormat) {
-		sdf = dateFormat;
-	}
+    /**
+     * This method returns a String representing the relative date by comparing
+     * the Date being passed in to the date / time that it is right now.
+     * 
+     * @param date
+     * @return String representing the relative date
+     */
+    public static String getRelativeDate(Date date) {
+        Calendar converted = GregorianCalendar.getInstance();
+        converted.setTime(date);
 
+        return getRelativeDate(converted);
+    }
 }
